@@ -300,7 +300,7 @@
     box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 20px 60px rgba(0,0,0,0.5);
     display: none;
   }
-  #qrcode-container canvas, #qrcode-container img { display: block; border-radius: 4px; }
+  #qrcode-container canvas, #qrcode-container img { display: block; border-radius: 4px; max-width: 100%; height: auto; }
 
   .qr-meta {
     width: 100%;
@@ -1098,6 +1098,26 @@ async function decryptMessage(encoded, password) {
 }
 
 // ─── Generate QR ─────────────────────────────────────────────────────────────
+// Capacidad en bytes (modo byte, nivel de correccion M) por version de QR (ISO/IEC 18004)
+const QR_BYTE_CAPACITY_M = [0,14,26,42,62,84,106,122,152,180,213,251,287,331,362,412,450,504,560,624,666,711,779,857,911,997,1059,1125,1190,1264,1370,1452,1538,1628,1722,1809,1911,1989,2099,2213,2331];
+
+function qrVersionForLength(byteLength) {
+  for (let v = 1; v < QR_BYTE_CAPACITY_M.length; v++) {
+    if (QR_BYTE_CAPACITY_M[v] >= byteLength) return v;
+  }
+  return QR_BYTE_CAPACITY_M.length - 1;
+}
+
+// Calcula un tamano de lienzo que garantice pixeles por modulo suficientes
+// para que la camara del movil pueda leer el QR (antes era un tamano fijo de
+// 220px que se quedaba corto y hacia el QR ilegible con mensajes largos).
+function qrSizeForData(text) {
+  const version = qrVersionForLength(text.length);
+  const modules = version * 4 + 17;
+  const pxPerModule = 10; // suficiente para escaneo fiable desde pantalla
+  return Math.min(640, Math.max(240, modules * pxPerModule));
+}
+
 async function generateQR() {
   const msg = document.getElementById('create-msg').value.trim();
   const key = document.getElementById('create-key').value;
@@ -1110,10 +1130,11 @@ async function generateQR() {
     document.getElementById('qrcode-container').innerHTML = '';
 
     if (qrInstance) { qrInstance.clear(); }
+    const qrSize = qrSizeForData(encrypted);
     qrInstance = new QRCode(document.getElementById('qrcode-container'), {
       text: encrypted,
-      width: 220,
-      height: 220,
+      width: qrSize,
+      height: qrSize,
       colorDark: '#000000',
       colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M
